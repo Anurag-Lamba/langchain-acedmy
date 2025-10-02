@@ -14,7 +14,17 @@ def multiply(a: int, b: int) -> int:
     return a * b
 
 # LLM with bound tool
-llm = ChatOpenAI(model="gpt-4o")
+# llm = ChatOpenAI(model="gpt-4o")
+
+
+
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+
+from langchain_groq import ChatGroq
+llm=ChatGroq(groq_api_key=os.getenv("GROQ_API_KEY"),model='gemma2-9b-it')
 llm_with_tools = llm.bind_tools([multiply])
 
 # Node
