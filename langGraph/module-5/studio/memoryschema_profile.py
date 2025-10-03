@@ -10,7 +10,14 @@ from langgraph.store.base import BaseStore
 import configuration
 
 # Initialize the LLM
-model = ChatOpenAI(model="gpt-4o", temperature=0) 
+# model = ChatOpenAI(model="gpt-4o", temperature=0) 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+from langchain_groq import ChatGroq
+model=ChatGroq(groq_api_key=GROQ_API_KEY,model='gemma2-9b-it')
 
 # Schema 
 class UserProfile(BaseModel):

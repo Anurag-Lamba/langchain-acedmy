@@ -4,6 +4,12 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import START, StateGraph, MessagesState
 from langgraph.prebuilt import tools_condition, ToolNode
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+
 def add(a: int, b: int) -> int:
     """Adds a and b.
 
@@ -34,7 +40,11 @@ def divide(a: int, b: int) -> float:
 tools = [add, multiply, divide]
 
 # Define LLM with bound tools
-llm = ChatOpenAI(model="gpt-4o")
+# llm = ChatOpenAI(model="gpt-4o")
+
+
+from langchain_groq import ChatGroq
+llm=ChatGroq(groq_api_key=GROQ_API_KEY,model='gemma2-9b-it')
 llm_with_tools = llm.bind_tools(tools)
 
 # System message

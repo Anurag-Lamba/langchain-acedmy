@@ -47,18 +47,26 @@ def extract_tool_info(tool_calls, schema_name="Memory"):
         schema_name: Name of the schema tool (e.g., "Memory", "ToDo", "Profile")
     """
 
-    # Initialize list of changes
     changes = []
-    
+
     for call_group in tool_calls:
         for call in call_group:
             if call['name'] == 'PatchDoc':
-                changes.append({
-                    'type': 'update',
-                    'doc_id': call['args']['json_doc_id'],
-                    'planned_edits': call['args']['planned_edits'],
-                    'value': call['args']['patches'][0]['value']
-                })
+                patches = call['args'].get('patches', [])
+                if patches:
+                    changes.append({
+                        'type': 'update',
+                        'doc_id': call['args']['json_doc_id'],
+                        'planned_edits': call['args'].get('planned_edits', []),
+                        'value': patches[0].get('value')
+                    })
+                else:
+                    # Optional: record that no actual update was needed
+                    changes.append({
+                        'type': 'noop',
+                        'doc_id': call['args']['json_doc_id'],
+                        'note': 'PatchDoc received but no changes were made (empty patch).'
+                    })
             elif call['name'] == schema_name:
                 changes.append({
                     'type': 'new',
@@ -74,13 +82,18 @@ def extract_tool_info(tool_calls, schema_name="Memory"):
                 f"Plan: {change['planned_edits']}\n"
                 f"Added content: {change['value']}"
             )
-        else:
+        elif change['type'] == 'new':
             result_parts.append(
                 f"New {schema_name} created:\n"
                 f"Content: {change['value']}"
             )
-    
+        elif change['type'] == 'noop':
+            result_parts.append(
+                f"No update made for document {change['doc_id']} (empty patch)."
+            )
+
     return "\n\n".join(result_parts)
+
 
 ## Schema definitions
 
@@ -101,6 +114,9 @@ class Profile(BaseModel):
 
 # ToDo schema
 class ToDo(BaseModel):
+    """
+    A tool for creating and updating items in the user's ToDo list.
+    """
     task: str = Field(description="The task to be completed.")
     time_to_complete: Optional[int] = Field(description="Estimated time to complete the task (minutes).")
     deadline: Optional[datetime] = Field(
@@ -125,7 +141,14 @@ class UpdateMemory(TypedDict):
     update_type: Literal['user', 'todo', 'instructions']
 
 # Initialize the model
-model = ChatOpenAI(model="gpt-4o", temperature=0)
+# model = ChatOpenAI(model="gpt-4o", temperature=0)
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+from langchain_groq import ChatGroq
+model=ChatGroq(groq_api_key=GROQ_API_KEY,model='openai/gpt-oss-120b')
 
 ## Create the Trustcall extractors for updating the user profile and ToDo list
 profile_extractor = create_extractor(
@@ -282,8 +305,7 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
     """Reflect on the chat history and update the memory collection."""
     
     # Get the user ID from the config
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
+    user_id = config["configurable"]["user_id"]
 
     # Define the namespace for the memories
     namespace = ("todo", user_id)
@@ -316,16 +338,16 @@ def update_todos(state: MessagesState, config: RunnableConfig, store: BaseStore)
 
     # Invoke the extractor
     result = todo_extractor.invoke({"messages": updated_messages, 
-                                         "existing": existing_memories})
+                                    "existing": existing_memories})
 
-    # Save save the memories from Trustcall to the store
+    # Save the memories from Trustcall to the store
     for r, rmeta in zip(result["responses"], result["response_metadata"]):
         store.put(namespace,
                   rmeta.get("json_doc_id", str(uuid.uuid4())),
                   r.model_dump(mode="json"),
             )
         
-    # Respond to the tool call made in task_mAIstro, confirming the update    
+    # Respond to the tool call made in task_mAIstro, confirming the update
     tool_calls = state['messages'][-1].tool_calls
 
     # Extract the changes made by Trustcall and add the the ToolMessage returned to task_mAIstro

@@ -13,17 +13,24 @@ from langgraph.store.base import BaseStore
 import configuration
 
 # Initialize the LLM
-model = ChatOpenAI(model="gpt-4o", temperature=0) 
+# model = ChatOpenAI(model="gpt-4o", temperature=0) 
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-# Memory schema
+GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+from langchain_groq import ChatGroq
+model=ChatGroq(groq_api_key=GROQ_API_KEY,model='openai/gpt-oss-120b')
+
 class Memory(BaseModel):
+    """Extract a memory from the user's conversation."""
     content: str = Field(description="The main content of the memory. For example: User expressed interest in learning about French.")
 
 # Create the Trustcall extractor
 trustcall_extractor = create_extractor(
     model,
     tools=[Memory],
-    tool_choice="Memory",
+    tool_choice="auto",
     # This allows the extractor to insert new memories
     enable_inserts=True,
 )
@@ -43,15 +50,14 @@ TRUSTCALL_INSTRUCTION = """Reflect on following interaction.
 Use the provided tools to retain any necessary memories about the user. 
 
 Use parallel tool calling to handle updates and insertions simultaneously:"""
+
+
 def call_model(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
-    """Load memory from the store and use it to personalize the chatbot's response."""
+    """Load memories from the store and use them to personalize the chatbot's response."""
     
-    # Get configuration
-    configurable = configuration.Configuration.from_runnable_config(config)
-
     # Get the user ID from the config
-    user_id = configurable.user_id
+    user_id = config["configurable"]["user_id"]
 
     # Retrieve memory from the store
     namespace = ("memories", user_id)
@@ -68,13 +74,10 @@ def call_model(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
 def write_memory(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
-    """Reflect on the chat history and save a memory to the store."""
+    """Reflect on the chat history and update the memory collection."""
     
-    # Get configuration
-    configurable = configuration.Configuration.from_runnable_config(config)
-
     # Get the user ID from the config
-    user_id = configurable.user_id
+    user_id = config["configurable"]["user_id"]
 
     # Define the namespace for the memories
     namespace = ("memories", user_id)
@@ -103,6 +106,7 @@ def write_memory(state: MessagesState, config: RunnableConfig, store: BaseStore)
                   rmeta.get("json_doc_id", str(uuid.uuid4())),
                   r.model_dump(mode="json"),
             )
+
 
 # Define the graph
 builder = StateGraph(MessagesState,config_schema=configuration.Configuration)

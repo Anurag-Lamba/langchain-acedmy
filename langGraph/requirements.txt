@@ -11,3 +11,8 @@ tavily-python
 wikipedia
 trustcall
 langgraph-cli[inmem]
+
+
+dotenv
+langchain_groq
+ipykernel
